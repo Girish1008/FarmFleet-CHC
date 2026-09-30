@@ -1,0 +1,220 @@
+// Prisma schema for FarmFleet - Custom Hiring Centre (CHC) Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CHC_MANAGER
+  OPERATOR
+  FARMER
+}
+
+enum MachineStatus {
+  ACTIVE
+  MAINTENANCE
+  BROKEN
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+enum VoiceRecordingStatus {
+  PROCESSING
+  CONFIRMED
+  REJECTED
+}
+
+enum ProposalReason {
+  BREAKDOWN
+  DELAY
+  CANCELLATION
+  URGENT_JOB
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum NotificationType {
+  REQUEST_APPROVED
+  JOB_ASSIGNED
+  JOB_SCHEDULED
+  JOB_RESCHEDULED
+  JOB_COMPLETED
+  JOB_CANCELLED
+}
+
+model User {
+  id               String               @id @default(uuid())
+  name             String
+  email            String               @unique
+  phone            String?
+  role             Role                 @default(FARMER)
+  passwordHash     String
+  village          String?
+  address          String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  farmerBookings   Booking[]            @relation("FarmerBookings")
+  operatorBookings Booking[]            @relation("OperatorBookings")
+  farmerRequests   FarmerRequest[]
+  operatorLocations OperatorLocation[]
+  notifications    FarmerNotification[]
+
+  @@map("users")
+}
+
+model Machine {
+  id        String        @id @default(uuid())
+  type      String        // TRACTOR, ROTAVATOR, SEEDER, SPRAYER, HARVESTER
+  name      String
+  status    MachineStatus @default(ACTIVE)
+  chclId    String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  bookings  Booking[]
+
+  @@map("machines")
+}
+
+model Booking {
+  id                       String          @id @default(uuid())
+  farmerId                 String
+  farmer                   User            @relation("FarmerBookings", fields: [farmerId], references: [id])
+  machineId                String
+  machine                  Machine         @relation(fields: [machineId], references: [id])
+  operatorId               String?
+  operator                 User?           @relation("OperatorBookings", fields: [operatorId], references: [id])
+  areaInAcres              Float
+  cropType                 String?
+  locationVillage          String
+  locationField            String?
+  locationLandmark         String?
+  scheduledStart           DateTime
+  scheduledEnd             DateTime
+  predictedDurationMinutes Int?
+  actualStart              DateTime?
+  actualEnd                DateTime?
+  status                   BookingStatus   @default(PENDING)
+  specialInstructions      String?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  voiceRecordings          VoiceRecording[]
+  operatorLocations        OperatorLocation[]
+
+  @@map("bookings")
+}
+
+model FarmerRequest {
+  id                   String        @id @default(uuid())
+  farmerId             String
+  farmer               User          @relation(fields: [farmerId], references: [id])
+  requestedMachineType String
+  areaInAcres          Float
+  cropType             String?
+  preferredDate        DateTime
+  locationVillage      String
+  locationField        String?
+  locationLandmark     String?
+  status               RequestStatus @default(PENDING)
+  specialInstructions  String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@map("farmer_requests")
+}
+
+model VoiceRecording {
+  id            String               @id @default(uuid())
+  bookingId     String?
+  booking       Booking?             @relation(fields: [bookingId], references: [id])
+  audioUrl      String
+  transcript    String?
+  extractedData Json
+  status        VoiceRecordingStatus @default(PROCESSING)
+  createdAt     DateTime             @default(now())
+
+  @@map("voice_recordings")
+}
+
+model ScheduleChangeProposal {
+  id              String         @id @default(uuid())
+  reason          ProposalReason
+  proposedChanges Json
+  status          ProposalStatus @default(PENDING)
+  createdAt       DateTime       @default(now())
+
+  @@map("schedule_change_proposals")
+}
+
+model JobDurationTrainingSample {
+  id                    String   @id @default(uuid())
+  machineType           String
+  areaInAcres           Float
+  cropType              String?
+  location              String?
+  season                String?
+  actualDurationMinutes Int
+  createdAt             DateTime @default(now())
+
+  @@map("job_duration_training_samples")
+}
+
+model OperatorLocation {
+  id         String   @id @default(uuid())
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id])
+  operatorId String
+  operator   User     @relation(fields: [operatorId], references: [id])
+  latitude   Float
+  longitude  Float
+  speed      Float?
+  timestamp  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([bookingId, timestamp])
+  @@index([operatorId, timestamp])
+  @@map("operator_locations")
+}
+
+model FarmerNotification {
+  id                String           @id @default(uuid())
+  farmerId          String
+  farmer            User             @relation(fields: [farmerId], references: [id])
+  type              NotificationType
+  title             String
+  message           String
+  relatedRequestId  String?
+  relatedBookingId  String?
+  read              Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+
+  @@map("farmer_notifications")
+}
