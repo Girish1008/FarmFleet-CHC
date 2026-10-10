@@ -88,7 +88,11 @@ FarmFleet/
 ```
 
 ---
+### Contribution & Development Workflow
 
+- **Project Documentation:** Maintains clear documentation of the application architecture, core modules, API endpoints, and local setup instructions.
+- **Version Control:** Uses Git and GitHub to track code changes, manage commits, and support collaborative development.
+- **Development Setup:** Provides installation instructions and environment configuration for running the frontend and backend locally.
 ## ⚡ Quick Start Guide
 
 ### 1. Installation
