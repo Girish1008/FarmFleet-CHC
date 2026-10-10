@@ -40,15 +40,23 @@ export const ChcDashboardPage: React.FC = () => {
     queryFn: () => api.schedule.listProposals(),
   });
 
+  // Fetch incoming farmer requests
+  const { data: farmerRequestsData, isLoading: farmerRequestsLoading } = useQuery({
+    queryKey: ['farmerRequests'],
+    queryFn: () => api.farmer.getRequests(),
+  });
+
   const bookings = bookingsData?.data || [];
   const machines = machinesData || [];
   const proposals = proposalsData || [];
+  const farmerRequests = farmerRequestsData || [];
 
   const activeBookingsCount = bookings.filter(
     b => b.status === 'IN_PROGRESS' || b.status === 'ASSIGNED'
   ).length;
 
-  const pendingRequestsCount = bookings.filter(b => b.status === 'PENDING').length + 2; // demo requests
+  const pendingFarmerRequests = farmerRequests.filter(r => r.status === 'PENDING');
+  const pendingRequestsCount = pendingFarmerRequests.length;
   const machinesInUseCount = machines.filter(m => m.status === 'ACTIVE').length;
   const todayJobsCount = bookings.length;
 
@@ -144,22 +152,26 @@ export const ChcDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+        <Link
+          to="/chc/bookings?tab=requests"
+          className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between hover:border-amber-400 hover:shadow-md transition-all group"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-amber-700 transition-colors">
               {t('chc.stats.pendingRequests')}
             </span>
-            <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
+            <div className="p-2 rounded-xl bg-amber-50 text-amber-600 group-hover:bg-amber-100 transition-colors">
               <Clock className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <span className="text-3xl font-black text-slate-900">{pendingRequestsCount}</span>
-            <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
-              Awaiting slot
+            <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md flex items-center space-x-1">
+              <span>Review Requests</span>
+              <ArrowRight className="w-3 h-3" />
             </span>
           </div>
-        </div>
+        </Link>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
@@ -195,6 +207,70 @@ export const ChcDashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Incoming Farmer Requests Banner / Section */}
+      {pendingFarmerRequests.length > 0 && (
+        <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-white rounded-2xl border-2 border-amber-300 shadow-sm p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-xs">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                  <span>Incoming Farmer Machinery Requests</span>
+                  <span className="px-2 py-0.5 text-xs font-black rounded-full bg-amber-500 text-white">
+                    {pendingFarmerRequests.length} Pending
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Requests submitted by local farmers waiting for equipment and operator assignment
+                </p>
+              </div>
+            </div>
+
+            <Link
+              to="/chc/bookings?tab=requests"
+              className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/20 transition-all self-start sm:self-auto"
+            >
+              <span>Manage & Accept All</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendingFarmerRequests.slice(0, 3).map(req => (
+              <div
+                key={req.id}
+                className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-xs flex flex-col justify-between space-y-3"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">{req.farmer?.name || 'Farmer'}</span>
+                    <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                      {req.requestedMachineType}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-600 mt-1 flex items-center space-x-1">
+                    <MapPin className="w-3 h-3 text-farm-600" />
+                    <span>{req.locationVillage} ({req.areaInAcres} Acres • {req.cropType || 'Crop'})</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Date: {new Date(req.preferredDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+
+                <Link
+                  to="/chc/bookings?tab=requests"
+                  className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold text-center transition-colors"
+                >
+                  Review & Accept
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent Fleet Activity */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">

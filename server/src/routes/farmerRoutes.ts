@@ -10,6 +10,8 @@ router.use(verifyJwt);
 router.get('/requests', FarmerController.listRequests);
 router.post('/requests', FarmerController.createRequest);
 router.get('/requests/:id', FarmerController.getRequestById);
+router.patch('/requests/:id/accept', FarmerController.acceptRequest);
+router.patch('/requests/:id/reject', FarmerController.rejectRequest);
 
 // Bookings
 router.get('/bookings', FarmerController.listBookings);

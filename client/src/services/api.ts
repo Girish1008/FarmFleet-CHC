@@ -192,6 +192,23 @@ export const api = {
       const res = await apiClient.get<{ data: FarmerRequest }>(`/farmer/requests/${id}`);
       return res.data.data;
     },
+    acceptRequest: async (
+      id: string,
+      payload?: { machineId?: string; operatorId?: string; scheduledStart?: string; scheduledEnd?: string }
+    ) => {
+      const res = await apiClient.patch<{ data: { request: FarmerRequest; booking: Booking }; message: string }>(
+        `/farmer/requests/${id}/accept`,
+        payload || {}
+      );
+      return res.data.data;
+    },
+    rejectRequest: async (id: string, payload?: { reason?: string }) => {
+      const res = await apiClient.patch<{ data: FarmerRequest; message: string }>(
+        `/farmer/requests/${id}/reject`,
+        payload || {}
+      );
+      return res.data.data;
+    },
     getBookings: async () => {
       const res = await apiClient.get<{ data: Booking[] }>('/farmer/bookings');
       return res.data.data;

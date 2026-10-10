@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useI18n } from '../i18n/index.js';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../services/api.js';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -33,9 +35,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { role } = useAuth();
   const { t } = useI18n();
 
+  const { data: requestsData } = useQuery({
+    queryKey: ['farmerRequests'],
+    queryFn: () => api.farmer.getRequests(),
+    enabled: role === 'ADMIN' || role === 'CHC_MANAGER',
+  });
+  const pendingCount = requestsData?.filter(r => r.status === 'PENDING').length || 0;
+
   const chcNavItems: NavItem[] = [
     { to: '/chc/dashboard', label: t('chc.dashboard.title'), icon: LayoutDashboard },
     { to: '/chc/bookings', label: t('bookings.title'), icon: ClipboardList },
+    {
+      to: '/chc/bookings?tab=requests',
+      label: 'Farmer Requests',
+      icon: Send,
+      badge: pendingCount > 0 ? `${pendingCount}` : undefined,
+    },
     {
       to: '/chc/bookings/new',
       label: t('bookings.new.title'),
