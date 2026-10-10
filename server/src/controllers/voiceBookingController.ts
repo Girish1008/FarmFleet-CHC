@@ -9,12 +9,16 @@ export class VoiceBookingController {
       const audioBuffer = file ? file.buffer : null;
       const fileName = file ? file.originalname : 'recorded_call.webm';
       const mimeType = file ? file.mimetype : 'audio/webm';
+      const language = (req.body?.language as string) || 'en';
+      const clientTranscript = (req.body?.transcript as string) || undefined;
 
       const result = await VoiceBookingService.processVoiceAudio(
         audioBuffer,
         fileName,
         mimeType,
-        req.user?.userId
+        req.user?.userId,
+        language,
+        clientTranscript
       );
 
       res.status(200).json({

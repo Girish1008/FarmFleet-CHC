@@ -27,7 +27,7 @@ import { ErrorBanner } from '../../../components/ErrorBanner.js';
 import { SuccessToast } from '../../../components/SuccessToast.js';
 
 export const NewBookingPage: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const navigate = useNavigate();
 
   // Form State
@@ -58,10 +58,11 @@ export const NewBookingPage: React.FC = () => {
   const [voiceRecordingId, setVoiceRecordingId] = useState<string | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
 
-  // Audio Recording Refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerIntervalRef = useRef<any>(null);
+  const liveTranscriptRef = useRef<string>('');
+  const recognitionRef = useRef<any>(null);
 
   // Feedback State
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +127,30 @@ export const NewBookingPage: React.FC = () => {
   // Start Voice Recording
   const startRecording = async () => {
     setError(null);
+    liveTranscriptRef.current = '';
+
+    // Initialize Web Speech API for real-time multilingual transcription (Tamil, Hindi, English)
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRec) {
+      try {
+        const recognition = new SpeechRec();
+        recognition.lang = language === 'ta' ? 'ta-IN' : language === 'hi' ? 'hi-IN' : 'en-IN';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onresult = (event: any) => {
+          let str = '';
+          for (let i = 0; i < event.results.length; ++i) {
+            str += event.results[i][0].transcript;
+          }
+          if (str) liveTranscriptRef.current = str;
+        };
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch (recErr) {
+        console.warn('SpeechRecognition initialization notice:', recErr);
+      }
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
@@ -157,6 +182,11 @@ export const NewBookingPage: React.FC = () => {
 
   // Stop Voice Recording
   const stopRecording = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -186,6 +216,10 @@ export const NewBookingPage: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'voice_call.webm');
+      formData.append('language', language);
+      if (liveTranscriptRef.current && liveTranscriptRef.current.trim()) {
+        formData.append('transcript', liveTranscriptRef.current.trim());
+      }
 
       const result = await api.voice.process(formData);
       setVoiceRecordingId(result.voiceRecordingId);
