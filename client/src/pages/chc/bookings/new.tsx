@@ -18,6 +18,9 @@ import {
   Compass,
   ArrowRight,
   Info,
+  Wand2,
+  FileText,
+  Volume2,
 } from 'lucide-react';
 import { api } from '../../../services/api.js';
 import { useI18n } from '../../../i18n/index.js';
@@ -36,7 +39,7 @@ export const NewBookingPage: React.FC = () => {
   const [machineId, setMachineId] = useState('');
   const [operatorId, setOperatorId] = useState('');
   const [areaInAcres, setAreaInAcres] = useState<number>(4.0);
-  const [cropType, setCropType] = useState('Wheat');
+  const [cropType, setCropType] = useState('Paddy');
   const [preferredDate, setPreferredDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -45,9 +48,9 @@ export const NewBookingPage: React.FC = () => {
   const [timeWindow, setTimeWindow] = useState<'morning' | 'afternoon' | 'evening' | 'custom'>('morning');
   const [scheduledStart, setScheduledStart] = useState('');
   const [scheduledEnd, setScheduledEnd] = useState('');
-  const [locationVillage, setLocationVillage] = useState('Sultanpur');
-  const [locationField, setLocationField] = useState('North Acreage Plot');
-  const [locationLandmark, setLocationLandmark] = useState('Near Primary School');
+  const [locationVillage, setLocationVillage] = useState('');
+  const [locationField, setLocationField] = useState('');
+  const [locationLandmark, setLocationLandmark] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
 
   // Voice AI Assistant State
@@ -57,6 +60,9 @@ export const NewBookingPage: React.FC = () => {
   const [voiceExtractedData, setVoiceExtractedData] = useState<VoiceBookingExtractedData | null>(null);
   const [voiceRecordingId, setVoiceRecordingId] = useState<string | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
+  const [editableTranscript, setEditableTranscript] = useState<string>('');
+  const [showManualTranscript, setShowManualTranscript] = useState<boolean>(true);
 
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -124,10 +130,66 @@ export const NewBookingPage: React.FC = () => {
     setToastMessage(`Selected AI Recommended Slot: ${slot.reason}`);
   };
 
+  // Sample Agricultural Calls for testing without microphone
+  const SAMPLE_CALLS = [
+    {
+      label: '🌾 தமிழ் (Tamil Call)',
+      desc: 'விவசாயி முருகன் (வாடிப்பட்டி) - 4 ஏக்கர் நெல், ரோட்டவேட்டர்',
+      lang: 'ta',
+      text: 'வணக்கம் CHC மையம். நான் விவசாயி முருகன், மதுரை வாடிப்பட்டி கிராமத்திலிருந்து பேசுகிறேன். நாளை காலை 4 ஏக்கர் நெல் வயலுக்கு உழவு செய்ய ஒரு ரோட்டவேட்டர் உடனடியாக தேவைப்படுகிறது. ஆரம்ப பள்ளி அருகில் வயல் உள்ளது. என் தொடர்பு எண் 9876543210.',
+    },
+    {
+      label: '🚜 Tanglish (Tamil-English Call)',
+      desc: 'Farmer Karthik (Pollachi) - 3 acre paddy, super seeder',
+      lang: 'ta',
+      text: 'Hello sir, naan farmer Karthik from Pollachi. Enaku 3 acre paddy ku super seeder venum tomorrow morning. Near water tank landmark. Mobile 9842112233.',
+    },
+    {
+      label: '🌾 हिंदी (Hindi Call)',
+      desc: 'किसान कुलदीप सिंह (लुधियाना) - 8 एकड़ धान, कंबाइन हार्वेस्टर',
+      lang: 'hi',
+      text: 'नमस्ते, मैं किसान कुलदीप सिंह बोल रहा हूं लुधियाना पिंड से। मुझे कल सुबह 8 एकड़ धान के लिए कंबाइन हार्वेस्टर चाहिए। संपर्क 9814012345।',
+    },
+    {
+      label: '🚜 English (Punjab Dispatch)',
+      desc: 'Farmer Gurpreet Singh (Morinda) - 10 acres wheat, combine',
+      lang: 'en',
+      text: 'Hello CHC, this is farmer Gurpreet Singh calling from Morinda village. I need a combine harvester for 10 acres of wheat field near the primary school tomorrow. My phone is 9876543214.',
+    },
+  ];
+
+  // Transpose extracted NLP data into booking form fields
+  const applyExtractedDataToForm = (data: VoiceBookingExtractedData) => {
+    if (data.farmerName) setFarmerName(data.farmerName);
+    if (data.farmerPhone) setFarmerPhone(data.farmerPhone);
+    if (data.areaInAcres) setAreaInAcres(data.areaInAcres);
+    if (data.cropType) setCropType(data.cropType);
+    if (data.village) setLocationVillage(data.village);
+    if (data.field) setLocationField(data.field);
+    if (data.landmark) setLocationLandmark(data.landmark);
+    if (data.preferredDate) setPreferredDate(data.preferredDate);
+    if (data.timeWindow && ['morning', 'afternoon', 'evening'].includes(data.timeWindow)) {
+      setTimeWindow(data.timeWindow as any);
+    }
+
+    // Match machine type
+    if (data.machineType && machines && machines.length > 0) {
+      const targetType = data.machineType.toUpperCase();
+      const match = machines.find(m => m.type.toUpperCase() === targetType);
+      if (match) {
+        setMachineId(match.id);
+      } else {
+        const partial = machines.find(m => m.type.toUpperCase().includes(targetType) || targetType.includes(m.type.toUpperCase()));
+        if (partial) setMachineId(partial.id);
+      }
+    }
+  };
+
   // Start Voice Recording
   const startRecording = async () => {
     setError(null);
     liveTranscriptRef.current = '';
+    setLiveTranscript('');
 
     // Initialize Web Speech API for real-time multilingual transcription (Tamil, Hindi, English)
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -142,7 +204,11 @@ export const NewBookingPage: React.FC = () => {
           for (let i = 0; i < event.results.length; ++i) {
             str += event.results[i][0].transcript;
           }
-          if (str) liveTranscriptRef.current = str;
+          if (str) {
+            liveTranscriptRef.current = str;
+            setLiveTranscript(str);
+            setEditableTranscript(str);
+          }
         };
         recognition.start();
         recognitionRef.current = recognition;
@@ -194,19 +260,39 @@ export const NewBookingPage: React.FC = () => {
     }
   };
 
-  // Simulated Voice Capture for testing environments
-  const simulateVoiceCapture = async () => {
+  // Process text transcript directly via Agricultural NLP engine
+  const handleProcessTranscript = async (textToProcess: string, customLang?: string) => {
+    if (!textToProcess.trim()) return;
     setIsProcessingVoice(true);
-    setTimeout(async () => {
-      try {
-        const dummyBlob = new Blob(['simulated-audio-content'], { type: 'audio/webm' });
-        await handleAudioUpload(dummyBlob);
-      } catch (err) {
-        setError('Voice processing failed');
-      } finally {
-        setIsProcessingVoice(false);
-      }
-    }, 1200);
+    setError(null);
+    try {
+      const activeLang = customLang || language;
+      const dummyBlob = new Blob(['simulated-audio-content'], { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('audio', dummyBlob, 'voice_call.webm');
+      formData.append('language', activeLang);
+      formData.append('transcript', textToProcess.trim());
+
+      const result = await api.voice.process(formData);
+      setVoiceRecordingId(result.voiceRecordingId);
+      setVoiceTranscript(result.transcript);
+      setEditableTranscript(result.transcript);
+      setVoiceExtractedData(result.extractedData);
+
+      applyExtractedDataToForm(result.extractedData);
+      setToastMessage('Multilingual agricultural entities extracted and applied to form!');
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to process voice transcript');
+    } finally {
+      setIsProcessingVoice(false);
+    }
+  };
+
+  // Simulated Voice Capture for testing environments without microphone
+  const simulateVoiceCapture = async () => {
+    const defaultSample = SAMPLE_CALLS.find(s => s.lang === language) || SAMPLE_CALLS[0];
+    setEditableTranscript(defaultSample.text);
+    await handleProcessTranscript(defaultSample.text, defaultSample.lang);
   };
 
   // Handle Audio File / Blob Upload to backend
@@ -217,31 +303,19 @@ export const NewBookingPage: React.FC = () => {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'voice_call.webm');
       formData.append('language', language);
-      if (liveTranscriptRef.current && liveTranscriptRef.current.trim()) {
-        formData.append('transcript', liveTranscriptRef.current.trim());
+      const textToSubmit = liveTranscriptRef.current.trim() || editableTranscript.trim();
+      if (textToSubmit) {
+        formData.append('transcript', textToSubmit);
       }
 
       const result = await api.voice.process(formData);
       setVoiceRecordingId(result.voiceRecordingId);
       setVoiceTranscript(result.transcript);
+      setEditableTranscript(result.transcript);
       setVoiceExtractedData(result.extractedData);
 
-      // Auto-fill form fields from extracted data
-      if (result.extractedData.farmerName) setFarmerName(result.extractedData.farmerName);
-      if (result.extractedData.farmerPhone) setFarmerPhone(result.extractedData.farmerPhone);
-      if (result.extractedData.areaInAcres) setAreaInAcres(result.extractedData.areaInAcres);
-      if (result.extractedData.cropType) setCropType(result.extractedData.cropType);
-      if (result.extractedData.village) setLocationVillage(result.extractedData.village);
-      if (result.extractedData.field) setLocationField(result.extractedData.field);
-      if (result.extractedData.landmark) setLocationLandmark(result.extractedData.landmark);
-
-      // Match machine type
-      if (result.extractedData.machineType && machines) {
-        const match = machines.find(
-          m => m.type.toUpperCase() === result.extractedData.machineType?.toUpperCase()
-        );
-        if (match) setMachineId(match.id);
-      }
+      applyExtractedDataToForm(result.extractedData);
+      setToastMessage('Voice booking processed and parameters transposed into form!');
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to process voice recording');
     } finally {
@@ -396,6 +470,34 @@ export const NewBookingPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Real-time Listening Feedback */}
+        {isRecording && (
+          <div className="mt-6 pt-6 border-t border-slate-700/60 space-y-3">
+            <div className="flex items-center justify-between text-xs text-red-300 font-bold">
+              <span className="flex items-center space-x-2">
+                <Volume2 className="w-4 h-4 text-red-400 animate-bounce" />
+                <span>
+                  Listening live in {language === 'ta' ? 'தமிழ் (Tamil)' : language === 'hi' ? 'हिंदी (Hindi)' : 'English'}...
+                </span>
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-red-900/60 border border-red-500/50 text-red-200">
+                Recording: {recordingSeconds}s
+              </span>
+            </div>
+            <div className="p-3 bg-black/40 border border-red-500/30 rounded-xl text-sm text-white font-medium min-h-[52px]">
+              {liveTranscript || (
+                <span className="text-slate-400 italic">
+                  {language === 'ta'
+                    ? 'பேசுங்கள் (எ.கா: "நான் விவசாயி முருகன், 4 ஏக்கர் நெல் வயலுக்கு ரோட்டவேட்டர் வேண்டும்...")...'
+                    : language === 'hi'
+                    ? 'बोलें (उदा: "मैं किसान कुलदीप सिंह, 5 एकड़ धान के लिए कंबाइन हार्वेस्टर चाहिए...")...'
+                    : 'Speak naturally (e.g. "I am farmer Ramesh from Rampur, need a rotavator for 4 acres...")...'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Processing State */}
         {isProcessingVoice && (
           <div className="mt-6 pt-6 border-t border-slate-700/60 flex items-center justify-center space-x-3 text-sm text-farm-300 font-semibold animate-pulse">
@@ -404,14 +506,90 @@ export const NewBookingPage: React.FC = () => {
           </div>
         )}
 
+        {/* Multilingual Agricultural NLP Test Bench & Spoken Transcript Editor */}
+        <div className="mt-6 pt-6 border-t border-slate-700/80 space-y-4">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowManualTranscript(prev => !prev)}
+              className="text-xs font-bold text-farm-300 hover:text-farm-200 flex items-center space-x-1.5 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Spoken Transcript & Quick Call Test Bench</span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {showManualTranscript ? '(Hide)' : '(Show)'}
+              </span>
+            </button>
+            <span className="text-[11px] text-slate-400">
+              Zero-credit multilingual NLP engine (Tamil, Hindi, English)
+            </span>
+          </div>
+
+          {showManualTranscript && (
+            <div className="bg-slate-950/60 border border-slate-700/70 rounded-2xl p-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Spoken Call Transcript (Review, edit, or paste call notes):
+                </label>
+                <textarea
+                  rows={2}
+                  value={editableTranscript}
+                  onChange={e => setEditableTranscript(e.target.value)}
+                  placeholder={
+                    language === 'ta'
+                      ? 'வணக்கம், நான் விவசாயி முருகன், வாடிப்பட்டி கிராமத்திலிருந்து பேசுகிறேன்...'
+                      : language === 'hi'
+                      ? 'नमस्ते, मैं किसान कुलदीप सिंह, लुधियाना पिंड से बोल रहा हूं...'
+                      : 'Hello CHC, this is farmer Gurpreet Singh calling from Morinda...'
+                  }
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-farm-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+                    Quick Sample Calls:
+                  </span>
+                  {SAMPLE_CALLS.map((sample, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setEditableTranscript(sample.text);
+                        handleProcessTranscript(sample.text, sample.lang);
+                      }}
+                      disabled={isProcessingVoice}
+                      title={sample.desc}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium hover:border-farm-500/50 transition-all hover:scale-105 active:scale-95"
+                    >
+                      {sample.label}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleProcessTranscript(editableTranscript)}
+                  disabled={isProcessingVoice || !editableTranscript.trim()}
+                  className="px-4 py-1.5 rounded-xl bg-farm-600 hover:bg-farm-500 disabled:opacity-50 text-white text-xs font-bold flex items-center space-x-1.5 shadow-md shadow-farm-600/20 transition-all"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>Extract with Multilingual NLP</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Extracted Fields Preview Form & Confirm Prompt */}
         {voiceExtractedData && !isProcessingVoice && (
           <div className="mt-6 pt-6 border-t border-slate-700/80 bg-white/5 rounded-2xl p-5 border border-white/10 space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-farm-400">
-                {t('voice.previewPrompt')} (Confidence: {(voiceExtractedData.confidence || 0.92) * 100}%)
+                {t('voice.previewPrompt')} (Confidence: {Math.round((voiceExtractedData.confidence || 0.95) * 100)}%)
               </span>
-              <span className="text-xs text-slate-400">Audio ready for confirmation</span>
+              <span className="text-xs text-slate-400">Entities Transposed to Form</span>
             </div>
 
             {voiceTranscript && (
@@ -423,21 +601,41 @@ export const NewBookingPage: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
                 <span className="text-slate-400 block font-medium">Farmer:</span>
-                <span className="font-bold text-white text-sm">{voiceExtractedData.farmerName || 'Rajesh'}</span>
+                <span className="font-bold text-white text-sm">
+                  {voiceExtractedData.farmerName || 'Farmer Client'}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  📞 {voiceExtractedData.farmerPhone || 'Not specified'}
+                </span>
               </div>
               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
-                <span className="text-slate-400 block font-medium">Machine:</span>
-                <span className="font-bold text-white text-sm">{voiceExtractedData.machineType || 'ROTAVATOR'}</span>
+                <span className="text-slate-400 block font-medium">Machine Required:</span>
+                <span className="font-bold text-farm-300 text-sm">
+                  {voiceExtractedData.machineType || 'TRACTOR'}
+                </span>
               </div>
               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
                 <span className="text-slate-400 block font-medium">Area & Crop:</span>
-                <span className="font-bold text-white text-sm">{voiceExtractedData.areaInAcres} Acres ({voiceExtractedData.cropType})</span>
+                <span className="font-bold text-white text-sm">
+                  {voiceExtractedData.areaInAcres} Acres ({voiceExtractedData.cropType})
+                </span>
               </div>
               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
                 <span className="text-slate-400 block font-medium">Location:</span>
                 <span className="font-bold text-white text-sm">{voiceExtractedData.village}</span>
+                {voiceExtractedData.landmark && (
+                  <span className="text-[10px] text-slate-400 block mt-0.5 truncate">
+                    📍 {voiceExtractedData.landmark}
+                  </span>
+                )}
               </div>
             </div>
+
+            {voiceExtractedData.specialNotes && (
+              <div className="text-[11px] text-farm-400 bg-farm-950/40 border border-farm-500/20 px-3 py-1.5 rounded-lg">
+                ℹ️ {voiceExtractedData.specialNotes}
+              </div>
+            )}
 
             {/* Prompt: Schedule this job? Yes / No */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
@@ -491,7 +689,7 @@ export const NewBookingPage: React.FC = () => {
                 required
                 value={farmerName}
                 onChange={e => setFarmerName(e.target.value)}
-                placeholder="e.g. Rajesh Sharma"
+                placeholder="e.g. Murugan or Rajesh Sharma"
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-farm-600 focus:bg-white text-slate-900 font-medium"
               />
             </div>
@@ -564,12 +762,14 @@ export const NewBookingPage: React.FC = () => {
               onChange={e => setCropType(e.target.value)}
               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-farm-600 focus:bg-white text-slate-900 font-medium"
             >
-              <option value="Wheat">Wheat (गेहूं)</option>
-              <option value="Paddy">Paddy / Rice (धान)</option>
-              <option value="Mustard">Mustard (सरसों)</option>
-              <option value="Cotton">Cotton (कपास)</option>
-              <option value="Sugarcane">Sugarcane (गन्ना)</option>
-              <option value="Maize">Maize (मक्का)</option>
+              <option value="Paddy">Paddy / Rice (धान / நெல்)</option>
+              <option value="Wheat">Wheat (गेहूं / கோதுமை)</option>
+              <option value="Mustard">Mustard (सरसों / கடுகு)</option>
+              <option value="Cotton">Cotton (कपास / பருத்தி)</option>
+              <option value="Sugarcane">Sugarcane (गन्ना / கரும்பு)</option>
+              <option value="Maize">Maize (मक्का / மக்காச்சோளம்)</option>
+              <option value="Banana">Banana (केला / வாழை)</option>
+              <option value="Groundnut">Groundnut (मूंगफली / வேர்க்கடலை)</option>
             </select>
           </div>
 
@@ -609,7 +809,7 @@ export const NewBookingPage: React.FC = () => {
                 required
                 value={locationVillage}
                 onChange={e => setLocationVillage(e.target.value)}
-                placeholder="e.g. Sultanpur"
+                placeholder="e.g. Vadipatti or Morinda"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-farm-600 focus:bg-white text-slate-900"
               />
             </div>
